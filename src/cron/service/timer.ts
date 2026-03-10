@@ -322,14 +322,16 @@ export function applyJobResult(
   job.state.lastRunStatus = result.status;
   job.state.lastStatus = result.status;
   job.state.lastDurationMs = Math.max(0, result.endedAt - result.startedAt);
-  job.state.lastError = result.error;
-  job.state.lastErrorReason =
-    result.status === "error" && typeof result.error === "string"
-      ? (resolveFailoverReasonFromError(result.error) ?? undefined)
-      : undefined;
   job.state.lastDelivered = result.delivered;
   const deliveryStatus = resolveDeliveryStatus({ job, delivered: result.delivered });
   job.state.lastDeliveryStatus = deliveryStatus;
+  // Clear lastError when delivery succeeded to prevent contradictory state
+  // where lastError is set but deliveryStatus is "delivered" (#41764).
+  job.state.lastError = deliveryStatus === "delivered" ? undefined : result.error;
+  job.state.lastErrorReason =
+    result.status === "error" && typeof result.error === "string" && deliveryStatus !== "delivered"
+      ? (resolveFailoverReasonFromError(result.error) ?? undefined)
+      : undefined;
   job.state.lastDeliveryError =
     deliveryStatus === "not-delivered" && result.error ? result.error : undefined;
   job.updatedAtMs = result.endedAt;
