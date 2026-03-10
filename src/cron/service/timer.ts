@@ -337,7 +337,9 @@ export function applyJobResult(
   job.updatedAtMs = result.endedAt;
 
   // Track consecutive errors for backoff / auto-disable.
-  if (result.status === "error") {
+  // When delivery succeeded despite an agent error, treat as success for
+  // error tracking — prevents false failure alerts for jobs that always deliver.
+  if (result.status === "error" && deliveryStatus !== "delivered") {
     job.state.consecutiveErrors = (job.state.consecutiveErrors ?? 0) + 1;
     const alertConfig = resolveFailureAlert(state, job);
     if (alertConfig && job.state.consecutiveErrors >= alertConfig.after) {

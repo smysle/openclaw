@@ -1784,4 +1784,45 @@ describe("Cron issue regressions", () => {
     expect(job.state.lastRunAtMs).toBe(startedAt);
     expect(job.state.nextRunAtMs).toBe(expectedNextMs);
   });
+
+  it("clears consecutiveErrors and lastError when delivery succeeds despite agent error (#41764)", () => {
+    const startedAt = Date.parse("2026-03-10T12:00:00.000Z");
+    const endedAt = startedAt + 5_000;
+    const state = createCronServiceState({
+      cronEnabled: true,
+      storePath: "/tmp/cron-41764-delivered-error.json",
+      log: noopLogger,
+      nowMs: () => endedAt,
+      enqueueSystemEvent: vi.fn(),
+      requestHeartbeatNow: vi.fn(),
+      runIsolatedAgentJob: createDefaultIsolatedRunner(),
+    });
+    const job = createIsolatedRegressionJob({
+      id: "delivered-despite-error",
+      name: "delivered-despite-error",
+      scheduledAt: startedAt,
+      schedule: { kind: "cron", expr: "*/5 * * * *" },
+      payload: { kind: "agentTurn", message: "check" },
+      state: {
+        nextRunAtMs: startedAt - 1_000,
+        runningAtMs: startedAt - 500,
+        consecutiveErrors: 3,
+        lastFailureAlertAtMs: startedAt - 60_000,
+      },
+    });
+
+    applyJobResult(state, job, {
+      status: "error",
+      error: "Message failed",
+      delivered: true,
+      startedAt,
+      endedAt,
+    });
+
+    // Delivery succeeded → error tracking should be reset
+    expect(job.state.lastDeliveryStatus).toBe("delivered");
+    expect(job.state.lastError).toBeUndefined();
+    expect(job.state.consecutiveErrors).toBe(0);
+    expect(job.state.lastFailureAlertAtMs).toBeUndefined();
+  });
 });
