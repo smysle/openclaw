@@ -1785,7 +1785,7 @@ describe("Cron issue regressions", () => {
     expect(job.state.nextRunAtMs).toBe(expectedNextMs);
   });
 
-  it("clears consecutiveErrors and lastError when delivery succeeds despite agent error (#41764)", () => {
+  it("preserves error details and increments consecutiveErrors on delivered error, but suppresses alerts (#41764)", () => {
     const startedAt = Date.parse("2026-03-10T12:00:00.000Z");
     const endedAt = startedAt + 5_000;
     const state = createCronServiceState({
@@ -1819,10 +1819,13 @@ describe("Cron issue regressions", () => {
       endedAt,
     });
 
-    // Delivery succeeded → error tracking should be reset
+    // Delivery succeeded → error details preserved for diagnostics,
+    // consecutiveErrors incremented for retry/disable guards, but
+    // failure alert suppressed (not re-triggered) since output was delivered.
     expect(job.state.lastDeliveryStatus).toBe("delivered");
-    expect(job.state.lastError).toBeUndefined();
-    expect(job.state.consecutiveErrors).toBe(0);
-    expect(job.state.lastFailureAlertAtMs).toBeUndefined();
+    expect(job.state.lastError).toBe("Message failed");
+    expect(job.state.consecutiveErrors).toBe(4);
+    // lastFailureAlertAtMs unchanged — no new alert was emitted
+    expect(job.state.lastFailureAlertAtMs).toBe(startedAt - 60_000);
   });
 });

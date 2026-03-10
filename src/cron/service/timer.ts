@@ -325,11 +325,13 @@ export function applyJobResult(
   job.state.lastDelivered = result.delivered;
   const deliveryStatus = resolveDeliveryStatus({ job, delivered: result.delivered });
   job.state.lastDeliveryStatus = deliveryStatus;
-  // Clear lastError when delivery succeeded to prevent contradictory state
-  // where lastError is set but deliveryStatus is "delivered" (#41764).
-  job.state.lastError = deliveryStatus === "delivered" ? undefined : result.error;
+  // Always preserve error details for diagnostics, even when delivery
+  // succeeded.  The delivery status already indicates the output reached the
+  // user; clearing the error text would make it impossible to debug why the
+  // run was still marked as an error (#41764).
+  job.state.lastError = result.error;
   job.state.lastErrorReason =
-    result.status === "error" && typeof result.error === "string" && deliveryStatus !== "delivered"
+    result.status === "error" && typeof result.error === "string"
       ? (resolveFailoverReasonFromError(result.error) ?? undefined)
       : undefined;
   job.state.lastDeliveryError =
@@ -337,11 +339,13 @@ export function applyJobResult(
   job.updatedAtMs = result.endedAt;
 
   // Track consecutive errors for backoff / auto-disable.
-  // When delivery succeeded despite an agent error, treat as success for
-  // error tracking — prevents false failure alerts for jobs that always deliver.
-  if (result.status === "error" && deliveryStatus !== "delivered") {
+  // Always increment on error so one-shot `at` jobs respect maxAttempts
+  // even when delivery succeeded; only suppress failure *alerts* when
+  // the output was delivered.
+  if (result.status === "error") {
     job.state.consecutiveErrors = (job.state.consecutiveErrors ?? 0) + 1;
-    const alertConfig = resolveFailureAlert(state, job);
+    const alertConfig =
+      deliveryStatus !== "delivered" ? resolveFailureAlert(state, job) : undefined;
     if (alertConfig && job.state.consecutiveErrors >= alertConfig.after) {
       const isBestEffort =
         job.delivery?.bestEffort === true ||
