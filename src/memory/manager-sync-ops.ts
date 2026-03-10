@@ -394,6 +394,8 @@ export abstract class MemoryManagerSyncOps {
     }
     this.watcher = chokidar.watch(Array.from(watchPaths), {
       ignoreInitial: true,
+      // Cap recursive depth to prevent FD exhaustion in large workspaces (see #41606).
+      depth: 3,
       ignored: (watchPath) => shouldIgnoreMemoryWatchPath(String(watchPath)),
       awaitWriteFinish: {
         stabilityThreshold: this.settings.sync.watchDebounceMs,
