@@ -730,6 +730,16 @@ export async function onTimer(state: CronServiceState) {
   }
 }
 
+function hasAlreadyExecutedScheduledSlot(job: CronJob, scheduledAtMs: number): boolean {
+  const lastRunAtMs = job.state.lastRunAtMs;
+  // Guard against stale expired nextRunAtMs values that still point at a slot
+  // the scheduler already executed (for example via startup catch-up). In that
+  // case we must not treat the expired timestamp as runnable again.
+  return (
+    typeof lastRunAtMs === "number" && Number.isFinite(lastRunAtMs) && lastRunAtMs >= scheduledAtMs
+  );
+}
+
 function isRunnableJob(params: {
   job: CronJob;
   nowMs: number;
@@ -769,7 +779,9 @@ function isRunnableJob(params: {
   }
   const next = job.state.nextRunAtMs;
   if (typeof next === "number" && Number.isFinite(next) && nowMs >= next) {
-    return true;
+    if (!hasAlreadyExecutedScheduledSlot(job, next)) {
+      return true;
+    }
   }
   if (
     typeof next === "number" &&
