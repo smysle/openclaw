@@ -328,6 +328,9 @@ function registerEventHandlers(
         return;
       }
       if (entries.length === 1) {
+        if (await isMessageAlreadyProcessed(last)) {
+          return;
+        }
         await dispatchFeishuMessage(last);
         return;
       }
