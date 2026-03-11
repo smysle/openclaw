@@ -735,8 +735,10 @@ function hasAlreadyExecutedScheduledSlot(job: CronJob, scheduledAtMs: number): b
   // Guard against stale expired nextRunAtMs values that still point at a slot
   // the scheduler already executed (for example via startup catch-up). In that
   // case we must not treat the expired timestamp as runnable again.
+  // Use strict > (not >=) so that retry slots where nextRunAtMs === lastRunAtMs
+  // (e.g. zero-backoff retries finishing in the same millisecond) are still permitted.
   return (
-    typeof lastRunAtMs === "number" && Number.isFinite(lastRunAtMs) && lastRunAtMs >= scheduledAtMs
+    typeof lastRunAtMs === "number" && Number.isFinite(lastRunAtMs) && lastRunAtMs > scheduledAtMs
   );
 }
 
